@@ -49,11 +49,11 @@ pub fn create_pending_user_tenant_role(
   let sql =
     "
         INSERT INTO pending_user_tenant_roles
-        (email_address, tenant_id, role)
+        (email_address, tenant_id, role_desc)
         VALUES
         ($1, $2, $3)
         ON CONFLICT (email_address, tenant_id)
-        DO UPDATE SET role = $3;
+        DO UPDATE SET role_desc = $3;
     "
 
   use _ <- result.try({
@@ -142,7 +142,7 @@ pub fn get_pending_roles_by_email(
 ) -> Result(List(PendingTenantRole), pgo.QueryError) {
   let sql =
     "
-        SELECT tenant_id, role
+        SELECT tenant_id, role_desc
         FROM pending_user_tenant_roles
         WHERE email_address = $1;
     "

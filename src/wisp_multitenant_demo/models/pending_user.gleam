@@ -8,11 +8,12 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/pgo.{type Connection}
 import gleam/result
+import lustre/element/html
 import wisp
 import wisp_multitenant_demo/models/pending_user_tenant_role
 import wisp_multitenant_demo/models/user
 import wisp_multitenant_demo/models/user_tenant_role
-import wisp_multitenant_demo/types/email.{type Email}
+import wisp_multitenant_demo/types/email.{type Email, EmailMessage}
 import wisp_multitenant_demo/types/password.{type Password}
 import wisp_multitenant_demo/types/time
 
@@ -45,12 +46,12 @@ pub fn create(
   let sql =
     "
         INSERT INTO pending_users
-        (email_address, token_hash, expires_at)
+        (email_address, invite_token_hash, expires_at)
         VALUES
         ($1, $2, $3)
         ON CONFLICT (email_address)
         DO UPDATE SET
-            token_hash = $2,
+            invite_token_hash = $2,
             expires_at = $3;
     "
 

@@ -3,6 +3,7 @@ import gleam/option.{Some}
 import gleam/pgo
 import mist
 import wisp
+import wisp_multitenant_demo/types/email
 import wisp_multitenant_demo/web/router
 import wisp_multitenant_demo/web/web
 
@@ -21,7 +22,12 @@ pub fn main() {
       ),
     )
 
-  let app_ctx = web.AppContext(db: db, static_directory: static_directory())
+  let app_ctx =
+    web.AppContext(
+      db: db,
+      static_directory: static_directory(),
+      send_email: email.print_email_message,
+    )
 
   let handler = router.handle_request(_, app_ctx)
 

@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: wisp_multitenant_demo_db
+    restart: always
+    environment:
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: wisp_multitenant_demo
+    volumes:
+      - pgdata:/var/lib/postgresql/wisp_multitenant_demo_data
+    ports:
+      - "127.0.0.1:5432:5432"
+ 
+volumes:
+  pgdata:

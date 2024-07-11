@@ -1,5 +1,6 @@
 import gleam/bool
 import gleam/dynamic.{type DecodeError, type Dynamic, DecodeError}
+import gleam/io
 import gleam/list
 import gleam/result
 import gleam/string
@@ -59,4 +60,20 @@ pub fn decode_email(d: Dynamic) {
     Error(_) -> Error([DecodeError(expected: "email", found: "?", path: [])])
     Ok(email) -> Ok(email)
   }
+}
+
+pub type EmailMessage {
+  EmailMessage(recipients: List(Email), subject: String, body: String)
+}
+
+pub fn print_email_message(msg: EmailMessage) -> Result(Nil, String) {
+  let recipients = msg.recipients |> list.map(to_string) |> string.join("; ")
+
+  io.println("----- EMAIL -----")
+  io.println("To:\t" <> recipients)
+  io.println("Subject:\t" <> msg.subject)
+  io.println(msg.body)
+  io.println("----- END EMAIL -----")
+
+  Ok(Nil)
 }

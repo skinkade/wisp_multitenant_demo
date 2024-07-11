@@ -43,7 +43,7 @@ pub fn set_user_tenant_role(
   let sql =
     "
         INSERT INTO user_tenant_roles
-        (user_id, tenant_id, role)
+        (user_id, tenant_id, role_desc)
         VALUES
         ($1, $2, $3)
         ON CONFLICT (user_id, tenant_id)
@@ -122,7 +122,7 @@ pub fn get_user_tenant_roles(
       SELECT
         tur.tenant_id,
         t.full_name,
-        tur.role
+        tur.role_desc
       FROM user_tenant_roles utr
       JOIN tenants t
         ON utr.tenant_id = t.id

@@ -5,9 +5,14 @@ import wisp_multitenant_demo/models/user
 import wisp_multitenant_demo/models/user_tenant_role.{
   type UserTenantRoleForAccess,
 }
+import wisp_multitenant_demo/types/email
 
 pub type AppContext {
-  AppContext(db: pgo.Connection, static_directory: String)
+  AppContext(
+    db: pgo.Connection,
+    static_directory: String,
+    send_email: fn(email.EmailMessage) -> Result(Nil, String),
+  )
 }
 
 /// Thought: maybe roles should be non-null,
