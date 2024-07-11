@@ -4,13 +4,13 @@ import gleam/result
 import wisp_multitenant_demo/models/tenant.{type TenantId}
 import wisp_multitenant_demo/models/user.{type UserId}
 
-pub type TenantUserRole {
+pub type UserTenantRole {
   TenantOwner
   TenantAdmin
   TenantMember
 }
 
-pub fn role_to_string(role: TenantUserRole) -> String {
+pub fn role_to_string(role: UserTenantRole) -> String {
   case role {
     TenantMember -> "member"
     TenantAdmin -> "admin"
@@ -18,7 +18,7 @@ pub fn role_to_string(role: TenantUserRole) -> String {
   }
 }
 
-pub fn role_from_string(str: String) -> Result(TenantUserRole, Nil) {
+pub fn role_from_string(str: String) -> Result(UserTenantRole, Nil) {
   case str {
     "member" -> Ok(TenantMember)
     "admin" -> Ok(TenantAdmin)
@@ -34,19 +34,19 @@ pub fn decode_role(d: Dynamic) {
   Ok(role)
 }
 
-pub fn set_tenant_user_role(
+pub fn set_user_tenant_role(
   db: Connection,
-  tenant_id: TenantId,
   user_id: UserId,
-  role: TenantUserRole,
+  tenant_id: TenantId,
+  role: UserTenantRole,
 ) -> Result(Nil, QueryError) {
   let sql =
     "
-        INSERT INTO tenant_user_roles
-        (tenant_id, user_id, role)
+        INSERT INTO user_tenant_roles
+        (user_id, tenant_id, role)
         VALUES
         ($1, $2, $3)
-        ON CONFLICT (tenant_id, user_id)
+        ON CONFLICT (user_id, tenant_id)
         DO UPDATE SET role = $3;
     "
 
@@ -55,8 +55,8 @@ pub fn set_tenant_user_role(
       sql,
       db,
       [
-        tenant_id |> tenant.id_to_int() |> pgo.int(),
         user_id |> user.id_to_int() |> pgo.int(),
+        tenant_id |> tenant.id_to_int() |> pgo.int(),
         role |> role_to_string() |> pgo.text(),
       ],
       dynamic.dynamic,
@@ -74,8 +74,8 @@ pub fn remove_tenant_user_role(
   let sql =
     "
         DELETE FROM tenant_user_roles
-        WHERE tenant_id = $1
-            AND user_id = $2;
+        WHERE user_id = $1
+          AND tenant_id = $2;
     "
 
   use _ <- result.try({
@@ -83,8 +83,8 @@ pub fn remove_tenant_user_role(
       sql,
       db,
       [
-        tenant_id |> tenant.id_to_int() |> pgo.int(),
         user_id |> user.id_to_int() |> pgo.int(),
+        tenant_id |> tenant.id_to_int() |> pgo.int(),
       ],
       dynamic.dynamic,
     )
@@ -93,18 +93,18 @@ pub fn remove_tenant_user_role(
   Ok(Nil)
 }
 
-pub type UserTenantRole {
-  UserTenantRole(
+pub type UserTenantRoleForAccess {
+  UserTenantRoleForAccess(
     tenant_id: TenantId,
     tenant_full_name: String,
-    role: TenantUserRole,
+    role: UserTenantRole,
   )
 }
 
 pub fn decode_assigned_role(d: Dynamic) {
   let decoder =
     dynamic.decode3(
-      UserTenantRole,
+      UserTenantRoleForAccess,
       dynamic.element(0, tenant.decode_tenant_id),
       dynamic.element(1, dynamic.string),
       dynamic.element(2, decode_role),
@@ -116,16 +116,16 @@ pub fn decode_assigned_role(d: Dynamic) {
 pub fn get_user_tenant_roles(
   db: Connection,
   user_id: UserId,
-) -> Result(List(UserTenantRole), QueryError) {
+) -> Result(List(UserTenantRoleForAccess), QueryError) {
   let sql =
     "
       SELECT
         tur.tenant_id,
         t.full_name,
         tur.role
-      FROM tenant_user_roles tur
+      FROM user_tenant_roles utr
       JOIN tenants t
-        ON tur.tenant_id = t.id
+        ON utr.tenant_id = t.id
       WHERE user_id = $1;
     "
 

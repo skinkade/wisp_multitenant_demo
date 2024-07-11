@@ -36,6 +36,6 @@ pub fn main() {
 }
 
 pub fn static_directory() -> String {
-  let assert Ok(priv_directory) = wisp.priv_directory("wisp_auth_example")
+  let assert Ok(priv_directory) = wisp.priv_directory("wisp_multitenant_demo")
   priv_directory <> "/static"
 }

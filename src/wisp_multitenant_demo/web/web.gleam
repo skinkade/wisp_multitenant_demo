@@ -1,8 +1,10 @@
 import gleam/option.{type Option}
 import gleam/pgo
 import wisp
-import wisp_multitenant_demo/models/tenant_user_role.{type UserTenantRole}
 import wisp_multitenant_demo/models/user
+import wisp_multitenant_demo/models/user_tenant_role.{
+  type UserTenantRoleForAccess,
+}
 
 pub type AppContext {
   AppContext(db: pgo.Connection, static_directory: String)
@@ -13,7 +15,7 @@ pub type AppContext {
 pub type RequestContext {
   RequestContext(
     user: Option(user.User),
-    user_tenant_roles: Option(List(UserTenantRole)),
+    user_tenant_roles: Option(List(UserTenantRoleForAccess)),
   )
 }
 

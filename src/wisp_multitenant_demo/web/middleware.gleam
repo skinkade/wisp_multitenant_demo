@@ -6,9 +6,9 @@ import gleam/pgo
 import gleam/result
 import wisp.{type Request, type Response}
 import wisp_multitenant_demo/models/tenant
-import wisp_multitenant_demo/models/tenant_user_role
 import wisp_multitenant_demo/models/user
 import wisp_multitenant_demo/models/user_session
+import wisp_multitenant_demo/models/user_tenant_role
 import wisp_multitenant_demo/web/web
 
 pub fn derive_session(
@@ -53,12 +53,13 @@ pub fn derive_user(
 pub fn derive_user_tenant_roles(
   conn: pgo.Connection,
   user: Option(user.User),
-  handler: fn(Option(List(tenant_user_role.UserTenantRole))) -> Response,
+  handler: fn(Option(List(user_tenant_role.UserTenantRoleForAccess))) ->
+    Response,
 ) -> Response {
   use <- bool.guard(option.is_none(user), handler(None))
   let assert Some(user) = user
 
-  case tenant_user_role.get_user_tenant_roles(conn, user.id) {
+  case user_tenant_role.get_user_tenant_roles(conn, user.id) {
     Error(_) -> wisp.internal_server_error()
     Ok(roles) -> handler(Some(roles))
   }
