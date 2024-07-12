@@ -47,7 +47,7 @@ pub fn set_user_tenant_role(
         VALUES
         ($1, $2, $3)
         ON CONFLICT (user_id, tenant_id)
-        DO UPDATE SET role = $3;
+        DO UPDATE SET role_desc = $3;
     "
 
   use _ <- result.try({
@@ -120,9 +120,9 @@ pub fn get_user_tenant_roles(
   let sql =
     "
       SELECT
-        tur.tenant_id,
+        utr.tenant_id,
         t.full_name,
-        tur.role_desc
+        utr.role_desc
       FROM user_tenant_roles utr
       JOIN tenants t
         ON utr.tenant_id = t.id

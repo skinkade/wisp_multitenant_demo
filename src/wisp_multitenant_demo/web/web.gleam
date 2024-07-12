@@ -1,6 +1,7 @@
 import gleam/option.{type Option}
 import gleam/pgo
 import wisp
+import wisp_multitenant_demo/models/tenant
 import wisp_multitenant_demo/models/user
 import wisp_multitenant_demo/models/user_tenant_role.{
   type UserTenantRoleForAccess,
@@ -21,6 +22,7 @@ pub type RequestContext {
   RequestContext(
     user: Option(user.User),
     user_tenant_roles: Option(List(UserTenantRoleForAccess)),
+    selected_tenant_id: Option(tenant.TenantId),
   )
 }
 

@@ -1,11 +1,15 @@
 import formal/form.{type Form}
 import gleam/int
+import gleam/io
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import lustre
 import lustre/attribute.{type Attribute, attribute}
 import lustre/element.{type Element, element}
 import lustre/element/html.{text}
+import wisp_multitenant_demo/models/tenant
+import wisp_multitenant_demo/types/email
+import wisp_multitenant_demo/web/web
 
 pub fn base_html(title: String, children) {
   html.html([attribute("lang", "en")], [
@@ -21,9 +25,100 @@ pub fn base_html(title: String, children) {
         attribute.href("/static/css/main.css"),
       ]),
     ]),
-    html.body([], [html.main([], children)]),
+    html.body([], children),
   ])
   |> element.to_document_string_builder
+}
+
+pub fn default(title: String, req_ctx: web.RequestContext, content) {
+  let auth_element = case req_ctx.user {
+    Some(user) ->
+      html.div([attribute.class("dropdown")], [
+        html.div(
+          [
+            attribute.class("btn m-1"),
+            attribute.role("button"),
+            attribute("tabindex", "0"),
+          ],
+          [text(email.to_string(user.email_address))],
+        ),
+        html.ul(
+          [
+            attribute.class(
+              "dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow",
+            ),
+            attribute("tabindex", "0"),
+          ],
+          [html.li([], [html.a([], [text("Logout")])])],
+        ),
+      ])
+    None ->
+      html.div([attribute.class("flex-0")], [
+        html.a([attribute.href("/login")], [
+          html.button([attribute.class("btn"), attribute.type_("button")], [
+            html.text("Login"),
+          ]),
+        ]),
+      ])
+  }
+
+  let tenant_element = case req_ctx.user_tenant_roles {
+    Some([]) -> element.none()
+    Some(roles) ->
+      html.form([attribute.method("get")], [
+        html.select(
+          [
+            attribute.class("select select-bordered w-full max-w-xs"),
+            attribute.attribute("onchange", "this.parentElement.submit()"),
+            attribute.name("tenantId"),
+          ],
+          [
+            html.option(
+              [
+                attribute.disabled(True),
+                attribute.selected(option.is_none(req_ctx.selected_tenant_id)),
+              ],
+              "Select Tenant",
+            ),
+            ..list.map(roles, fn(role) {
+              html.option(
+                [
+                  attribute.value(
+                    role.tenant_id |> tenant.id_to_int() |> int.to_string(),
+                  ),
+                  attribute.selected(
+                    Some(role.tenant_id) == req_ctx.selected_tenant_id,
+                  ),
+                ],
+                role.tenant_full_name,
+              )
+            })
+          ],
+        ),
+      ])
+
+    _ -> element.none()
+  }
+
+  base_html(title, [
+    html.header(
+      [
+        attribute.class(
+          "bg-base-100 text-base-content sticky top-0 z-30 flex h-16 w-full justify-center bg-opacity-90 backdrop-blur transition-shadow",
+        ),
+      ],
+      [
+        html.nav([attribute.class("navbar w-full")], [
+          html.div([attribute.class("flex flex-1 md:gap-1 lg:gap-2")], [
+            html.text("Demo"),
+          ]),
+          html.div([], [tenant_element]),
+          html.div([attribute.class("flex-0")], [auth_element]),
+        ]),
+      ],
+    ),
+    html.main([attribute.class("container")], content),
+  ])
 }
 
 pub fn field_error(form, name) {

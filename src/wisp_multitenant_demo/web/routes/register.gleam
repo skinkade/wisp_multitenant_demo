@@ -15,6 +15,7 @@ import lustre/element.{type Element}
 import lustre/element/html
 import wisp.{type Request, type Response}
 import wisp_multitenant_demo/models/pending_user
+import wisp_multitenant_demo/models/user_session
 import wisp_multitenant_demo/types/email
 import wisp_multitenant_demo/types/password
 import wisp_multitenant_demo/web/templates/base_templates
@@ -26,8 +27,8 @@ pub fn register_handler(
   req_ctx: web.RequestContext,
 ) {
   case req.method {
-    Get -> register_form()
-    Post -> submit_register_form(req, app_ctx)
+    Get -> register_form(req_ctx)
+    Post -> submit_register_form(req, app_ctx, req_ctx)
     _ -> wisp.method_not_allowed([Get, Post])
   }
 }
@@ -36,26 +37,29 @@ pub fn confirm_handler(
   req: Request,
   app_ctx: web.AppContext,
   req_ctx: web.RequestContext,
-  token: String,
 ) {
   case req.method {
-    Get -> confirmation_form(app_ctx, token)
-    Post -> submit_confirmation_form(req, app_ctx, token)
+    Get -> confirmation_form(req, app_ctx, req_ctx)
+    Post -> submit_confirmation_form(req, app_ctx, req_ctx)
     _ -> wisp.method_not_allowed([Get, Post])
   }
 }
 
-fn register_form() -> Response {
+fn register_form(req_ctx) -> Response {
   // Create a new empty Form to render the HTML form with.
   // If the form is for updating something that already exists you may want to
   // use `form.initial_values` to pre-fill some fields.
   let form = form.new()
 
-  base_templates.base_html("Register", [render_register_form(form, None)])
+  base_templates.default("Register", req_ctx, [render_register_form(form, None)])
   |> wisp.html_response(200)
 }
 
-fn submit_register_form(req: Request, app_ctx: web.AppContext) -> Response {
+fn submit_register_form(
+  req: Request,
+  app_ctx: web.AppContext,
+  req_ctx: web.RequestContext,
+) -> Response {
   use formdata <- wisp.require_form(req)
 
   let result =
@@ -86,10 +90,35 @@ fn submit_register_form(req: Request, app_ctx: web.AppContext) -> Response {
               |> wisp.html_response(500)
             }
             Ok(Nil) -> {
-              base_templates.base_html("Register", [
-                html.span([], [
-                  html.text("A registration link has been sent to your email"),
-                ]),
+              base_templates.default("Register", req_ctx, [
+                html.div(
+                  [attribute.class("flex justify-center p-4 xs:mt-8 sm:mt-16")],
+                  [
+                    html.div(
+                      [
+                        attribute.class(
+                          "min-w-96 max-w-96 flex flex-col justify-center",
+                        ),
+                      ],
+                      [
+                        html.h1(
+                          [attribute.class("text-xl font-bold mb-2 pl-1")],
+                          [element.text("Register")],
+                        ),
+                        html.div(
+                          [attribute.class("border rounded drop-shadow-sm p-4")],
+                          [
+                            html.p([], [
+                              html.text(
+                                "A registration link has been sent to your email.",
+                              ),
+                            ]),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ])
               |> wisp.html_response(201)
             }
@@ -145,7 +174,7 @@ pub fn create_invite_email(
   address: email.Email,
   token: pending_user.PendingUserToken,
 ) {
-  let link = "http://localhost:8000/register/" <> token.value
+  let link = "http://localhost:8000/register/confirm?token=" <> token.value
   let body =
     html.html([attribute.attribute("lang", "en")], [
       html.head([], [
@@ -169,15 +198,30 @@ pub fn create_invite_email(
   )
 }
 
-fn confirmation_form(app_ctx: web.AppContext, token: String) -> Response {
+fn query_token(req) {
+  req |> wisp.get_query() |> list.key_find("token")
+}
+
+fn confirmation_form(
+  req: Request,
+  app_ctx: web.AppContext,
+  req_ctx: web.RequestContext,
+) -> Response {
+  let token = query_token(req)
+  use <- bool.guard(
+    result.is_error(token),
+    invalid_or_expired_confirmation_token(req_ctx),
+  )
+  let assert Ok(token) = token
+
   let invite = pending_user.get_active_invite_by_token(app_ctx.db, token)
-  use <- bool.lazy_guard(result.is_error(invite), fn() {
-    io.debug(invite)
-    wisp.internal_server_error()
-  })
+  use <- bool.guard(result.is_error(invite), wisp.internal_server_error())
 
   let assert Ok(invite) = invite
-  use <- bool.guard(option.is_none(invite), wisp.not_found())
+  use <- bool.guard(
+    option.is_none(invite),
+    invalid_or_expired_confirmation_token(req_ctx),
+  )
 
   let assert Some(invite) = invite
   let form =
@@ -228,11 +272,49 @@ pub type ConfirmationSubmission {
   ConfirmationSubmission(token: String, password: password.Password)
 }
 
+fn invalid_or_expired_confirmation_token(app_ctx) {
+  base_templates.default("Invalid Registration Link", app_ctx, [
+    html.div([attribute.class("flex justify-center p-4 xs:mt-8 sm:mt-16")], [
+      html.div(
+        [attribute.class("min-w-96 max-w-96 flex flex-col justify-center")],
+        [
+          html.h1([attribute.class("text-xl font-bold mb-2 pl-1")], [
+            element.text("Invalid Registration Link"),
+          ]),
+          html.div([attribute.class("border rounded drop-shadow-sm p-4")], [
+            html.div(
+              [
+                attribute.class(
+                  "alert alert-warning py-2 px-4 text-sm rounded text-center flex flex-col",
+                ),
+                attribute.role("alert"),
+              ],
+              [
+                html.p([attribute.class("font-bold")], [
+                  html.text("This registration link is invalid or has expired."),
+                ]),
+              ],
+            ),
+          ]),
+        ],
+      ),
+    ]),
+  ])
+  |> wisp.html_response(404)
+}
+
 fn submit_confirmation_form(
   req: Request,
   app_ctx: web.AppContext,
-  token: String,
+  req_ctx: web.RequestContext,
 ) -> Response {
+  let token = query_token(req)
+  use <- bool.guard(
+    result.is_error(token),
+    invalid_or_expired_confirmation_token(req_ctx),
+  )
+  let assert Ok(token) = token
+
   let invite = pending_user.get_active_invite_by_token(app_ctx.db, token)
   use <- bool.lazy_guard(result.is_error(invite), fn() {
     io.debug(invite)
@@ -240,7 +322,10 @@ fn submit_confirmation_form(
   })
 
   let assert Ok(invite) = invite
-  use <- bool.guard(option.is_none(invite), wisp.not_found())
+  use <- bool.guard(
+    option.is_none(invite),
+    invalid_or_expired_confirmation_token(req_ctx),
+  )
   let assert Some(invite) = invite
 
   let password_policy = password.PasswordPolicy(min_length: 12, max_length: 50)
@@ -269,14 +354,35 @@ fn submit_confirmation_form(
       {
         Ok(user) -> {
           io.debug(user)
-          base_templates.base_html("Confirm Registration", [
-            html.span([], [html.text("Yay")]),
-          ])
-          |> wisp.html_response(201)
+          use <- bool.guard(
+            option.is_none(user),
+            invalid_or_expired_confirmation_token(req_ctx),
+          )
+          let assert Some(user) = user
+          case user_session.create_with_defaults(app_ctx.db, user.id) {
+            Ok(#(session_key, seconds_until_expiration)) -> {
+              wisp.redirect("/demo")
+              |> wisp.set_cookie(
+                req,
+                "session",
+                user_session.key_to_string(session_key),
+                wisp.Signed,
+                seconds_until_expiration,
+              )
+            }
+            Error(e) -> {
+              io.debug(e)
+              wisp.internal_server_error()
+            }
+          }
+          // base_templates.default("Confirm Registration", req_ctx, [
+          //   html.span([], [html.text("Yay")]),
+          // ])
+          // |> wisp.html_response(201)
         }
         Error(e) -> {
           io.debug(e)
-          base_templates.base_html("Confirm Registration", [
+          base_templates.default("Confirm Registration", req_ctx, [
             render_confirmation_form(
               form.initial_values([
                 #("token", token),
@@ -300,7 +406,7 @@ fn submit_confirmation_form(
             |> dict.insert("token", [token]),
           errors: form.errors,
         )
-      base_templates.base_html("Confirm Registration", [
+      base_templates.default("Confirm Registration", req_ctx, [
         render_confirmation_form(form, None),
       ])
       |> wisp.html_response(422)

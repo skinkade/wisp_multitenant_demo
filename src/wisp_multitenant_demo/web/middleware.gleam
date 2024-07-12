@@ -1,5 +1,6 @@
 import gleam/bool
 import gleam/int
+import gleam/io
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/pgo
@@ -60,7 +61,10 @@ pub fn derive_user_tenant_roles(
   let assert Some(user) = user
 
   case user_tenant_role.get_user_tenant_roles(conn, user.id) {
-    Error(_) -> wisp.internal_server_error()
+    Error(e) -> {
+      io.debug(e)
+      wisp.internal_server_error()
+    }
     Ok(roles) -> handler(Some(roles))
   }
 }
@@ -74,27 +78,99 @@ pub fn require_user(
   handler(user)
 }
 
-pub fn require_tenant_access(
+// pub fn require_tenant_access(
+//   req_ctx: web.RequestContext,
+//   tenant_id: tenant.TenantId,
+//   handler: fn() -> Response,
+// ) -> Response {
+//   use <- bool.guard(
+//     option.is_none(req_ctx.user_tenant_roles),
+//     wisp.redirect("/login"),
+//   )
+//   let assert Some(user_tenant_roles) = req_ctx.user_tenant_roles
+
+//   use <- bool.guard(
+//     !{
+//       user_tenant_roles
+//       |> list.map(fn(utr) { utr.tenant_id })
+//       |> list.contains(tenant_id)
+//     },
+//     wisp.response(500),
+//   )
+
+//   handler()
+// }
+
+pub fn derive_selected_tenant(
+  req,
+  handler: fn(Option(tenant.TenantId)) -> Response,
+) -> Response {
+  let tenant_id = {
+    let query_value = wisp.get_query(req) |> list.key_find("tenantId")
+    case query_value {
+      Ok(query_value) -> {
+        case int.parse(query_value) {
+          Ok(query_value) -> Ok(tenant.tenant_id(query_value))
+          Error(_) -> Error(Nil)
+        }
+      }
+      Error(_) -> {
+        use cookie_value <- result.try(wisp.get_cookie(
+          req,
+          "tenant",
+          wisp.Signed,
+        ))
+        let assert Ok(cookie_value) = int.parse(cookie_value)
+        Ok(tenant.tenant_id(cookie_value))
+      }
+    }
+  }
+
+  case tenant_id {
+    Ok(tenant_id) ->
+      handler(Some(tenant_id))
+      |> wisp.set_cookie(
+        req,
+        "tenant",
+        tenant_id |> tenant.id_to_int() |> int.to_string(),
+        wisp.Signed,
+        60 * 60 * 24,
+      )
+    Error(_) -> handler(None)
+  }
+}
+
+pub fn tenant_auth(
+  req: Request,
   req_ctx: web.RequestContext,
-  tenant_id: tenant.TenantId,
-  handler: fn() -> Response,
+  handler: fn(web.RequestContext) -> Response,
 ) -> Response {
   use <- bool.guard(
     option.is_none(req_ctx.user_tenant_roles),
-    wisp.redirect("/login"),
+    handler(web.RequestContext(..req_ctx, selected_tenant_id: None)),
   )
-  let assert Some(user_tenant_roles) = req_ctx.user_tenant_roles
+  let assert Some(roles) = req_ctx.user_tenant_roles
 
-  use <- bool.guard(
-    !{
-      user_tenant_roles
-      |> list.map(fn(utr) { utr.tenant_id })
-      |> list.contains(tenant_id)
-    },
-    wisp.response(500),
-  )
-
-  handler()
+  case req_ctx.selected_tenant_id, roles {
+    // if only one tenant allowed, default to that
+    None, [role] ->
+      handler(
+        web.RequestContext(..req_ctx, selected_tenant_id: Some(role.tenant_id)),
+      )
+    None, _ -> handler(req_ctx)
+    Some(selection), roles -> {
+      use <- bool.guard(
+        !{
+          roles
+          |> list.map(fn(utr) { utr.tenant_id })
+          |> list.contains(selection)
+        },
+        wisp.redirect("/demo")
+          |> wisp.set_cookie(req, "tenant", "", wisp.Signed, 0),
+      )
+      handler(req_ctx)
+    }
+  }
 }
 
 pub fn require_selected_tenant(
@@ -102,16 +178,12 @@ pub fn require_selected_tenant(
   req_ctx: web.RequestContext,
   handler: fn(tenant.TenantId) -> Response,
 ) -> Response {
-  let tenant_id = {
-    use value <- result.try(wisp.get_cookie(req, "tenant", wisp.Signed))
-    let assert Ok(value) = int.parse(value)
-    Ok(tenant.tenant_id(value))
-  }
+  use <- bool.guard(
+    option.is_none(req_ctx.selected_tenant_id),
+    wisp.redirect("/"),
+  )
 
-  use <- bool.guard(result.is_error(tenant_id), wisp.redirect("/"))
-  let assert Ok(tenant_id) = tenant_id
-
-  use <- require_tenant_access(req_ctx, tenant_id)
+  let assert Some(tenant_id) = req_ctx.selected_tenant_id
 
   handler(tenant_id)
 }
