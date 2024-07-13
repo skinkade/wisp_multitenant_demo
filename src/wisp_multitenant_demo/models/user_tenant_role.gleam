@@ -3,6 +3,7 @@ import gleam/pgo.{type Connection, type QueryError}
 import gleam/result
 import wisp_multitenant_demo/models/tenant.{type TenantId}
 import wisp_multitenant_demo/models/user.{type UserId}
+import wisp_multitenant_demo/types/email
 
 pub type UserTenantRole {
   TenantOwner
@@ -18,12 +19,12 @@ pub fn role_to_string(role: UserTenantRole) -> String {
   }
 }
 
-pub fn role_from_string(str: String) -> Result(UserTenantRole, Nil) {
+pub fn role_from_string(str: String) -> Result(UserTenantRole, String) {
   case str {
     "member" -> Ok(TenantMember)
     "admin" -> Ok(TenantAdmin)
     "owner" -> Ok(TenantOwner)
-    _ -> Error(Nil)
+    _ -> Error("Invalid role")
   }
 }
 
@@ -135,6 +136,56 @@ pub fn get_user_tenant_roles(
       db,
       [user_id |> user.id_to_int() |> pgo.int()],
       decode_assigned_role,
+    )
+  })
+
+  Ok(result.rows)
+}
+
+pub type TenantUser {
+  TenantUser(email_address: email.Email, role: UserTenantRole, is_pending: Bool)
+}
+
+pub fn get_tenant_users(
+  db: Connection,
+  tenant_id: TenantId,
+) -> Result(List(TenantUser), QueryError) {
+  // Lazy hack: third boolean field is whether user is pending
+  let sql =
+    "
+      SELECT
+        u.email_address,
+        utr.role_desc,
+        false
+      FROM user_tenant_roles utr
+      JOIN users u
+        ON utr.user_id = u.id
+      WHERE tenant_id = $1
+
+      UNION ALL
+
+      SELECT
+        putr.email_address,
+        putr.role_desc,
+        true
+      FROM pending_user_tenant_roles putr
+      WHERE tenant_id = $1
+    "
+
+  let decoder =
+    dynamic.decode3(
+      TenantUser,
+      dynamic.element(0, email.decode_email),
+      dynamic.element(1, decode_role),
+      dynamic.element(2, dynamic.bool),
+    )
+
+  use result <- result.try({
+    pgo.execute(
+      sql,
+      db,
+      [tenant_id |> tenant.id_to_int() |> pgo.int()],
+      decoder,
     )
   })
 

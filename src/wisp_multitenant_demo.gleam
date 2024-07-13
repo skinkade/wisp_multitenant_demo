@@ -9,7 +9,7 @@ import wisp_multitenant_demo/web/web
 
 pub fn main() {
   wisp.configure_logger()
-  let secret_key_base = wisp.random_string(64)
+  let secret_key_base = "MpVgHx0Absdm5V9se87NiPWfTLDKwUYUWO6ksnmGDPA"
 
   let db =
     pgo.connect(

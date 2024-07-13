@@ -1,9 +1,11 @@
 import gleam/io
 import wisp.{type Request, type Response}
 import wisp_multitenant_demo/web/middleware
+import wisp_multitenant_demo/web/routes/admin
 import wisp_multitenant_demo/web/routes/demo
 import wisp_multitenant_demo/web/routes/login
 import wisp_multitenant_demo/web/routes/register
+import wisp_multitenant_demo/web/routes/register_customer
 import wisp_multitenant_demo/web/web
 
 pub fn handle_request(req: Request, app_ctx: web.AppContext) -> Response {
@@ -22,6 +24,9 @@ pub fn handle_request(req: Request, app_ctx: web.AppContext) -> Response {
   use req_ctx <- middleware.tenant_auth(req, req_ctx)
 
   case wisp.path_segments(req) {
+    ["customer", "register"] ->
+      register_customer.register_handler(req, app_ctx, req_ctx)
+    ["admin", ..] -> admin.admin_router(req, app_ctx, req_ctx)
     ["demo"] -> demo.demo_handler(req, app_ctx, req_ctx)
     ["login"] -> login.login_handler(req, app_ctx, req_ctx)
     ["register"] -> register.register_handler(req, app_ctx, req_ctx)

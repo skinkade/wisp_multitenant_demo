@@ -81,7 +81,7 @@ fn submit_register_form(
           case email_attempt {
             Error(e) -> {
               io.debug(e)
-              base_templates.base_html("Register", [
+              base_templates.default("Register", req_ctx, [
                 render_register_form(
                   form.new(),
                   Some("An error occurred trying to create your account"),
@@ -126,7 +126,7 @@ fn submit_register_form(
         }
         Error(e) -> {
           io.debug(e)
-          base_templates.base_html("Register", [
+          base_templates.default("Register", req_ctx, [
             render_register_form(
               form.new(),
               Some("An error occurred trying to create your account"),
@@ -138,7 +138,9 @@ fn submit_register_form(
     }
 
     Error(form) -> {
-      base_templates.base_html("Register", [render_register_form(form, None)])
+      base_templates.default("Register", req_ctx, [
+        render_register_form(form, None),
+      ])
       |> wisp.html_response(422)
     }
   }
@@ -230,7 +232,7 @@ fn confirmation_form(
       #("email", email.to_string(invite.email_address)),
     ])
 
-  base_templates.base_html("Confirm Registration", [
+  base_templates.default("Confirm Registration", req_ctx, [
     render_confirmation_form(form, None),
   ])
   |> wisp.html_response(200)

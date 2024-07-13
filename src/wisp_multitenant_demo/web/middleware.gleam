@@ -18,17 +18,21 @@ pub fn derive_session(
   handler: fn(Option(user_session.SessionQueryRecord)) -> Response,
 ) -> Response {
   let session = wisp.get_cookie(req, "session", wisp.Signed)
-  use <- bool.guard(result.is_error(session), handler(None))
+  use <- bool.lazy_guard(result.is_error(session), fn() { handler(None) })
 
   let assert Ok(session) = session
   let session = user_session.get_by_session_key_string(conn, session)
-  use <- bool.guard(result.is_error(session), wisp.internal_server_error())
+  use <- bool.lazy_guard(result.is_error(session), fn() {
+    wisp.internal_server_error()
+  })
 
   let assert Ok(session) = session
-  use <- bool.guard(option.is_none(session), handler(None))
+  use <- bool.lazy_guard(option.is_none(session), fn() { handler(None) })
 
   let assert Some(session) = session
-  use <- bool.guard(user_session.is_expired(session), handler(None))
+  use <- bool.lazy_guard(user_session.is_expired(session), fn() {
+    handler(None)
+  })
 
   handler(Some(session))
 }
@@ -39,11 +43,13 @@ pub fn derive_user(
   handler: fn(Option(user.User)) -> Response,
 ) -> Response {
   use session <- derive_session(req, conn)
-  use <- bool.guard(option.is_none(session), handler(None))
+  use <- bool.lazy_guard(option.is_none(session), fn() { handler(None) })
 
   let assert Some(session) = session
   let user = user.get_by_id(conn, session.user_id)
-  use <- bool.guard(result.is_error(user), wisp.internal_server_error())
+  use <- bool.lazy_guard(result.is_error(user), fn() {
+    wisp.internal_server_error()
+  })
 
   let assert Ok(Some(user)) = user
   //   use <- bool.guard(user.disabled_or_locked(user), handler(None))
@@ -57,7 +63,7 @@ pub fn derive_user_tenant_roles(
   handler: fn(Option(List(user_tenant_role.UserTenantRoleForAccess))) ->
     Response,
 ) -> Response {
-  use <- bool.guard(option.is_none(user), handler(None))
+  use <- bool.lazy_guard(option.is_none(user), fn() { handler(None) })
   let assert Some(user) = user
 
   case user_tenant_role.get_user_tenant_roles(conn, user.id) {
@@ -73,7 +79,9 @@ pub fn require_user(
   req_ctx: web.RequestContext,
   handler: fn(user.User) -> Response,
 ) -> Response {
-  use <- bool.guard(option.is_none(req_ctx.user), wisp.redirect("/login"))
+  use <- bool.lazy_guard(option.is_none(req_ctx.user), fn() {
+    wisp.redirect("/login")
+  })
   let assert Some(user) = req_ctx.user
   handler(user)
 }
@@ -145,10 +153,9 @@ pub fn tenant_auth(
   req_ctx: web.RequestContext,
   handler: fn(web.RequestContext) -> Response,
 ) -> Response {
-  use <- bool.guard(
-    option.is_none(req_ctx.user_tenant_roles),
-    handler(web.RequestContext(..req_ctx, selected_tenant_id: None)),
-  )
+  use <- bool.lazy_guard(option.is_none(req_ctx.user_tenant_roles), fn() {
+    handler(web.RequestContext(..req_ctx, selected_tenant_id: None))
+  })
   let assert Some(roles) = req_ctx.user_tenant_roles
 
   case req_ctx.selected_tenant_id, roles {
@@ -159,14 +166,16 @@ pub fn tenant_auth(
       )
     None, _ -> handler(req_ctx)
     Some(selection), roles -> {
-      use <- bool.guard(
+      use <- bool.lazy_guard(
         !{
           roles
           |> list.map(fn(utr) { utr.tenant_id })
           |> list.contains(selection)
         },
-        wisp.redirect("/demo")
-          |> wisp.set_cookie(req, "tenant", "", wisp.Signed, 0),
+        fn() {
+          wisp.redirect("/demo")
+          |> wisp.set_cookie(req, "tenant", "", wisp.Signed, 0)
+        },
       )
       handler(req_ctx)
     }
@@ -174,16 +183,45 @@ pub fn tenant_auth(
 }
 
 pub fn require_selected_tenant(
-  req: wisp.Request,
   req_ctx: web.RequestContext,
   handler: fn(tenant.TenantId) -> Response,
 ) -> Response {
-  use <- bool.guard(
-    option.is_none(req_ctx.selected_tenant_id),
-    wisp.redirect("/"),
-  )
+  use <- bool.lazy_guard(option.is_none(req_ctx.selected_tenant_id), fn() {
+    wisp.redirect("/")
+  })
 
   let assert Some(tenant_id) = req_ctx.selected_tenant_id
 
   handler(tenant_id)
+}
+
+pub fn current_user_tenant_role(
+  req_ctx: web.RequestContext,
+) -> Option(user_tenant_role.UserTenantRole) {
+  case req_ctx.selected_tenant_id, req_ctx.user_tenant_roles {
+    None, _ | _, None -> None
+    Some(id), Some(roles) -> {
+      let role = list.find(roles, fn(role) { role.tenant_id == id })
+      use <- bool.lazy_guard(result.is_error(role), fn() { None })
+      let assert Ok(role) = role
+      Some(role.role)
+    }
+  }
+}
+
+pub fn require_one_of_tenant_roles(
+  req_ctx: web.RequestContext,
+  roles: List(user_tenant_role.UserTenantRole),
+  handler: fn() -> Response,
+) -> Response {
+  let role = current_user_tenant_role(req_ctx)
+  case role {
+    None -> wisp.response(403)
+    Some(role) -> {
+      use <- bool.lazy_guard(!list.contains(roles, role), fn() {
+        wisp.response(403)
+      })
+      handler()
+    }
+  }
 }

@@ -8,7 +8,9 @@ import lustre/attribute.{type Attribute, attribute}
 import lustre/element.{type Element, element}
 import lustre/element/html.{text}
 import wisp_multitenant_demo/models/tenant
+import wisp_multitenant_demo/models/user_tenant_role
 import wisp_multitenant_demo/types/email
+import wisp_multitenant_demo/web/middleware
 import wisp_multitenant_demo/web/web
 
 pub fn base_html(title: String, children) {
@@ -100,24 +102,84 @@ pub fn default(title: String, req_ctx: web.RequestContext, content) {
     _ -> element.none()
   }
 
-  base_html(title, [
-    html.header(
-      [
-        attribute.class(
-          "bg-base-100 text-base-content sticky top-0 z-30 flex h-16 w-full justify-center bg-opacity-90 backdrop-blur transition-shadow",
-        ),
-      ],
-      [
-        html.nav([attribute.class("navbar w-full")], [
-          html.div([attribute.class("flex flex-1 md:gap-1 lg:gap-2")], [
-            html.text("Demo"),
+  let admin_menu_items = case middleware.current_user_tenant_role(req_ctx) {
+    Some(user_tenant_role.TenantOwner) | Some(user_tenant_role.TenantAdmin) ->
+      html.ul([], [
+        html.li([], [
+          html.h2([attribute.class("menu-title")], [text("Admin")]),
+          html.ul([attribute.class("menu")], [
+            html.li([], [
+              html.a(
+                [
+                  // attribute.class("active"),
+                  attribute.href("/admin/manage-users"),
+                ],
+                [text("Users")],
+              ),
+            ]),
+            html.li([], [html.a([], [text("Integrations")])]),
+            html.li([], [html.a([], [text("Billing")])]),
           ]),
-          html.div([], [tenant_element]),
-          html.div([attribute.class("flex-0")], [auth_element]),
         ]),
-      ],
-    ),
-    html.main([attribute.class("container")], content),
+      ])
+    _ -> element.none()
+  }
+
+  base_html(title, [
+    html.div([attribute.class("drawer")], [
+      html.input([
+        attribute.class("drawer-toggle"),
+        attribute.type_("checkbox"),
+        attribute.id("page-drawer"),
+      ]),
+      html.div([attribute.class("drawer-content")], [
+        html.header(
+          [
+            attribute.class(
+              "bg-base-100 text-base-content sticky top-0 z-30 flex h-16 w-full justify-center bg-opacity-90 backdrop-blur transition-shadow",
+            ),
+          ],
+          [
+            html.nav([attribute.class("navbar w-full")], [
+              html.div([attribute.class("flex flex-1 md:gap-1 lg:gap-2")], [
+                html.label(
+                  [
+                    attribute.class("btn btn-neutral drawer-button"),
+                    attribute.for("page-drawer"),
+                  ],
+                  [text("[Product Name]")],
+                ),
+              ]),
+              html.div([], [tenant_element]),
+              html.div([attribute.class("flex-0")], [auth_element]),
+            ]),
+          ],
+        ),
+        html.main([attribute.class("container")], content),
+      ]),
+      html.div([attribute.class("drawer-side mt-16")], [
+        html.label(
+          [
+            attribute.class("drawer-overlay"),
+            attribute("aria-label", "close sidebar"),
+            attribute.for("page-drawer"),
+          ],
+          [],
+        ),
+        html.ul(
+          [
+            attribute.class(
+              "menu bg-base-200 text-base-content min-h-full w-80 p-4",
+            ),
+          ],
+          [
+            html.li([], [html.a([attribute.href("/demo")], [text("Demo Page")])]),
+            html.li([], [html.a([], [text("Something Else")])]),
+            admin_menu_items,
+          ],
+        ),
+      ]),
+    ]),
   ])
 }
 
@@ -176,10 +238,53 @@ pub fn form_error(error: Option(String)) {
   html.div([attribute.class("min-h-8 mb-2")], [error_element])
 }
 
+pub fn company_name_input(form: Form, name: String) {
+  html.div([attribute.class("mb-2")], [
+    html.label([attribute.for(name), attribute.class("font-bold mb-2 pl-1")], [
+      element.text("Company Name"),
+      html.div(
+        [attribute.class("input input-bordered flex items-center gap-4 mb-2")],
+        [
+          html.svg(
+            [
+              attribute.class("h-4 w-4 opacity-70"),
+              attribute("fill", "currentColor"),
+              attribute("viewBox", "0 0 512 512"),
+              attribute("xmlns", "http://www.w3.org/2000/svg"),
+            ],
+            [
+              element(
+                "path",
+                [
+                  attribute(
+                    "d",
+                    "M48 0C21.5 0 0 21.5 0 48V464c0 26.5 21.5 48 48 48h96V432c0-26.5 21.5-48 48-48s48 21.5 48 48v80h96c26.5 0 48-21.5 48-48V48c0-26.5-21.5-48-48-48H48zM64 240c0-8.8 7.2-16 16-16h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H80c-8.8 0-16-7.2-16-16V240zm112-16h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H176c-8.8 0-16-7.2-16-16V240c0-8.8 7.2-16 16-16zm80 16c0-8.8 7.2-16 16-16h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H272c-8.8 0-16-7.2-16-16V240zM80 96h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H80c-8.8 0-16-7.2-16-16V112c0-8.8 7.2-16 16-16zm80 16c0-8.8 7.2-16 16-16h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H176c-8.8 0-16-7.2-16-16V112zM272 96h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H272c-8.8 0-16-7.2-16-16V112c0-8.8 7.2-16 16-16z",
+                  ),
+                ],
+                [],
+              ),
+            ],
+          ),
+          html.input([
+            attribute.placeholder("AwesomeCorp LLC"),
+            attribute.class("grow"),
+            attribute.type_("text"),
+            attribute.name(name),
+            attribute.required(True),
+            attribute.value(form.value(form, name)),
+            attribute.autocomplete("off"),
+          ]),
+        ],
+      ),
+    ]),
+    field_error(form, name),
+  ])
+}
+
 pub fn email_input(form: Form, name: String, disabled: Bool) {
   html.div([attribute.class("mb-2")], [
     html.label(
-      [attribute.for("password"), attribute.class("font-bold mb-2 pl-1")],
+      [attribute.for("email"), attribute.class("font-bold mb-2 pl-1")],
       [
         element.text("Email"),
         html.div(
