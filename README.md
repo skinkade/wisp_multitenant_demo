@@ -1,24 +1,15 @@
-# wisp_multitenant_demo
+# Gleam + Wisp + Lustre Multi-tenant Application Demo
 
-[![Package Version](https://img.shields.io/hexpm/v/wisp_multitenant_demo)](https://hex.pm/packages/wisp_multitenant_demo)
-[![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/wisp_multitenant_demo/)
+```shell
+# Database
+docker-compose up -d
+echo 'DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/wisp_multitenant_demo?sslmode=disable"' > .env
+dbmate migrate
 
-```sh
-gleam add wisp_multitenant_demo@1
-```
-```gleam
-import wisp_multitenant_demo
+# CSS
+npm i
+npx tailwindcss -i ./priv/tailwind.css -o ./priv/static/css/main.css
 
-pub fn main() {
-  // TODO: An example of the project in use
-}
-```
-
-Further documentation can be found at <https://hexdocs.pm/wisp_multitenant_demo>.
-
-## Development
-
-```sh
-gleam run   # Run the project
-gleam test  # Run the tests
+# Gleam application
+gleam run
 ```
