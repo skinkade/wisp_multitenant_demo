@@ -1,5 +1,11 @@
 # Gleam + Wisp + Lustre Multi-tenant Application Demo
 
+## Demo
+
+https://github.com/user-attachments/assets/001cc431-7700-4962-aea5-4884746a7178
+
+## Usage
+
 ```shell
 # Database
 docker-compose up -d
